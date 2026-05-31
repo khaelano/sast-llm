@@ -7,7 +7,7 @@ Workshop membangun **Static Application Security Testing (SAST)** menggunakan LL
 ## Struktur Proyek
 
 ```
-hands-on-sast/
+sast-llm/
 ├── vulnerable-samples/          # Kode vulnerable untuk dianalisis
 │   ├── python/
 │   │   ├── sql_injection.py          # SQL Injection
@@ -20,13 +20,14 @@ hands-on-sast/
 │
 ├── llm-sast/                    # LLM-based SAST tool
 │   ├── analyzer.py                   # Main analyzer menggunakan DeepSeek API
-│   └── prompts.py                    # Prompt templates
+│   └── prompts.py                    # Prompt templates (6 jenis: general, detailed,
+│                                     #   quick, injection, auth, crypto)
 │
 ├── semgrep-sast/                # Semgrep configuration
 │   ├── rules/
 │   │   ├── python-security.yaml      # Custom rules untuk Python
 │   │   └── javascript-security.yaml  # Custom rules untuk JavaScript
-│   └── run_semgrep.sh                # Script runner
+│   └── run_semgrep.sh                # Script runner (all rulesets)
 │
 ├── comparison/
 │   └── compare.py                   # Comparison & HTML report generator
@@ -34,16 +35,20 @@ hands-on-sast/
 ├── results/                     # Output (auto-generated)
 │   ├── llm_results.json
 │   ├── semgrep_full_results.json
-│   └── comparison_report.html
+│   ├── comparison_report.html
+│   └── comparison_report_metrics.json
 │
-└── run_all.py                   # Master runner
+├── run_all.py                   # Master runner (LLM + Semgrep + Comparison)
+├── pyproject.toml               # Project metadata & dependencies
+├── .env.example                 # Template API key configuration
+└── .env                         # Your API key (git-ignored, auto-loaded)
 ```
 
 ---
 
 ## Prasyarat
 
-### 1. Python 3.14+
+### 1. Python 3.12+
 
 ```bash
 python3 --version
@@ -82,28 +87,30 @@ API key akan otomatis di-load dari `.env` — tidak perlu `export` manual.
 
 ## Quick Start
 
+Semua command menggunakan `uv run` agar otomatis menggunakan virtual environment. Jika kamu mengaktifkan venv secara manual (`source .venv/bin/activate`), kamu bisa langsung menjalankan `python` tanpa prefix `uv run`.
+
 ### Jalankan semua (LLM + Semgrep + Perbandingan)
 
 ```bash
-python run_all.py
+uv run python run_all.py
 ```
 
 ### Jalankan hanya LLM SAST
 
 ```bash
-python run_all.py --only-llm --model deepseek-v4-pro
+uv run python run_all.py --only-llm --model deepseek-v4-pro
 ```
 
 ### Jalankan hanya Semgrep
 
 ```bash
-python run_all.py --only-semgrep
+uv run python run_all.py --only-semgrep
 ```
 
 ### Buat laporan perbandingan (dari hasil yang sudah ada)
 
 ```bash
-python run_all.py --only-compare
+uv run python run_all.py --only-compare
 ```
 
 ---
@@ -133,7 +140,7 @@ Buka dan baca file-file sample berikut:
 #### 2.1 Analisis satu file
 
 ```bash
-python llm-sast/analyzer.py \
+uv run python llm-sast/analyzer.py \
   --file vulnerable-samples/python/sql_injection.py \
   --model deepseek-v4-pro \
   --output results/llm_sql.json
@@ -142,7 +149,7 @@ python llm-sast/analyzer.py \
 #### 2.2 Analisis seluruh direktori
 
 ```bash
-python llm-sast/analyzer.py \
+uv run python llm-sast/analyzer.py \
   --dir vulnerable-samples/ \
   --model deepseek-v4-pro \
   --output results/llm_results.json
@@ -151,13 +158,33 @@ python llm-sast/analyzer.py \
 #### 2.3 Gunakan model yang lebih cepat
 
 ```bash
-python llm-sast/analyzer.py \
+uv run python llm-sast/analyzer.py \
   --dir vulnerable-samples/ \
   --model deepseek-v4-flash \
   --output results/llm_results_flash.json
 ```
 
-#### 2.4 Lihat hasil
+#### 2.4 Gunakan prompt khusus
+
+Tersedia 6 jenis prompt untuk fokus analisis yang berbeda:
+
+| Prompt | Fokus |
+|--------|-------|
+| `general` | Semua kategori OWASP Top 10 (default) |
+| `detailed` | Analisis mendalam dengan attack scenario |
+| `quick` | Format ringkas, cocok untuk scan cepat |
+| `injection` | Khusus SQL/Command/Code Injection |
+| `auth` | Khusus Authentication & Authorization |
+| `crypto` | Khusus Cryptographic failures |
+
+```bash
+uv run python llm-sast/analyzer.py \
+  --dir vulnerable-samples/ \
+  --prompt injection \
+  --output results/llm_injection.json
+```
+
+#### 2.5 Lihat hasil
 
 ```bash
 cat results/llm_results.json | python3 -m json.tool | head -100
@@ -168,15 +195,15 @@ cat results/llm_results.json | python3 -m json.tool | head -100
 ```json
 {
   "tool": "LLM SAST Analyzer",
-  "total_vulnerabilities": 23,
+  "total_vulnerabilities": 37,
   "results": [
     {
       "file": "sql_injection.py",
       "vulnerabilities": [
         {
-          "line_start": 17,
-          "line_end": 19,
-          "severity": "CRITICAL",
+          "line_start": 10,
+          "line_end": 18,
+          "severity": "HIGH",
           "category": "SQL Injection",
           "cwe_id": "CWE-89",
           "title": "SQL Injection via String Concatenation",
@@ -227,6 +254,8 @@ semgrep --config semgrep-sast/rules/ \
 bash semgrep-sast/run_semgrep.sh
 ```
 
+> Script ini bisa dijalankan dari mana saja — paths relatif sudah di-resolve otomatis ke project root.
+
 #### 3.5 Output teks (langsung di terminal)
 
 ```bash
@@ -248,7 +277,7 @@ vulnerable-samples/python/sql_injection.py
 ### MODUL 4: Membandingkan Hasil
 
 ```bash
-python comparison/compare.py \
+uv run python comparison/compare.py \
   --llm results/llm_results.json \
   --semgrep results/semgrep_full_results.json \
   --output results/comparison_report.html
@@ -260,6 +289,14 @@ Kemudian buka laporan HTML di browser:
 open results/comparison_report.html
 ```
 
+Laporan mencakup:
+- Statistik temuan (LLM vs Semgrep vs Overlap)
+- Tabel semua findings dari kedua tool
+- Overlapping findings (temuan yang sama)
+- Temuan unik masing-masing tool
+- Analisis dan rekomendasi
+- Metrics JSON (`comparison_report_metrics.json`)
+
 ---
 
 ### MODUL 5: Membuat Custom Rule Semgrep
@@ -269,8 +306,8 @@ Buat file `semgrep-sast/rules/my-custom-rule.yaml`:
 ```yaml
 rules:
   - id: my-custom-sql-injection
-    pattern: |
-      $CURSOR.execute($QUERY + $USER_INPUT)
+    patterns:
+      - pattern: $CURSOR.execute($QUERY + $USER_INPUT)
     message: "SQL Injection: jangan gabungkan input user ke query!"
     languages: [python]
     severity: ERROR
@@ -283,6 +320,8 @@ Test rule:
 ```bash
 semgrep --config semgrep-sast/rules/my-custom-rule.yaml vulnerable-samples/python/
 ```
+
+> **Tips**: Gunakan `metavariable-regex` sebagai item terpisah di dalam `patterns` (bukan nested di dalam `pattern`). Lihat rule yang sudah ada di `semgrep-sast/rules/` sebagai referensi.
 
 ---
 
@@ -327,19 +366,27 @@ semgrep --config semgrep-sast/rules/my-custom-rule.yaml vulnerable-samples/pytho
 ### Eksperimen 1: Bandingkan model DeepSeek V4 Pro vs V4 Flash
 
 ```bash
-python llm-sast/analyzer.py --dir vulnerable-samples/ --model deepseek-v4-pro --output results/v4_pro.json
-python llm-sast/analyzer.py --dir vulnerable-samples/ --model deepseek-v4-flash --output results/v4_flash.json
+uv run python llm-sast/analyzer.py --dir vulnerable-samples/ --model deepseek-v4-pro --output results/v4_pro.json
+uv run python llm-sast/analyzer.py --dir vulnerable-samples/ --model deepseek-v4-flash --output results/v4_flash.json
 ```
 
-### Eksperimen 2: Tulis custom Semgrep rule untuk setiap vuln
+### Eksperimen 2: Bandingkan prompt template yang berbeda
+
+```bash
+uv run python llm-sast/analyzer.py --dir vulnerable-samples/ --prompt general --output results/prompt_general.json
+uv run python llm-sast/analyzer.py --dir vulnerable-samples/ --prompt detailed --output results/prompt_detailed.json
+uv run python llm-sast/analyzer.py --dir vulnerable-samples/ --prompt injection --output results/prompt_injection.json
+```
+
+### Eksperimen 3: Tulis custom Semgrep rule untuk setiap vuln
 
 Baca `vulnerable-samples/python/sql_injection.py` dan tulis rule yang tepat untuk mendeteksi setiap pola.
 
-### Eksperimen 3: Tambah kode vulnerable baru
+### Eksperimen 4: Tambah kode vulnerable baru
 
 Buat file baru di `vulnerable-samples/` dan lihat apakah kedua tool dapat mendeteksinya.
 
-### Eksperimen 4: Test false positive rate
+### Eksperimen 5: Test false positive rate
 
 Modifikasi kode vulnerable menjadi secure, dan periksa apakah tool masih memberi alert.
 
@@ -368,11 +415,25 @@ uv sync
 pip install openai python-dotenv rich pyyaml
 ```
 
+### API rate limit / connection error
+
+Analyzer akan otomatis retry hingga 3 kali dengan exponential backoff untuk error transient (429, 500, 502, 503, 504). Gunakan `--no-retry` untuk menonaktifkan:
+
+```bash
+uv run python llm-sast/analyzer.py --dir vulnerable-samples/ --no-retry
+```
+
 ### Semgrep scan sangat lambat
 
 ```bash
 # Tambahkan --timeout dan --max-memory
 semgrep --config p/owasp-top-ten --timeout 30 vulnerable-samples/
+```
+
+### Validasi custom Semgrep rules
+
+```bash
+semgrep --config semgrep-sast/rules/ --validate
 ```
 
 ---
