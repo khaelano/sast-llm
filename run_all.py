@@ -10,6 +10,10 @@ import subprocess
 import argparse
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 def run_command(cmd: list, description: str) -> tuple[int, str]:
     """Jalankan command dan kembalikan exit code + output"""
@@ -20,7 +24,7 @@ def run_command(cmd: list, description: str) -> tuple[int, str]:
     print()
 
     result = subprocess.run(
-        cmd, capture_output=False, text=True, cwd=Path(__file__).parent.parent
+        cmd, capture_output=False, text=True, cwd=Path(__file__).resolve().parent
     )
 
     return result.returncode, ""
@@ -39,12 +43,12 @@ def check_prerequisites():
 
     print(f"✓ Python {sys.version.split()[0]}")
 
-    # Check OpenAI API key
-    if not os.environ.get("OPENAI_API_KEY"):
-        issues.append("OPENAI_API_KEY tidak di-set")
-        print("✗ OPENAI_API_KEY: TIDAK ADA")
+    # Check DeepSeek API key
+    if not os.environ.get("DEEPSEEK_API_KEY"):
+        issues.append("DEEPSEEK_API_KEY tidak di-set")
+        print("✗ DEEPSEEK_API_KEY: TIDAK ADA")
     else:
-        print("✓ OPENAI_API_KEY: Ada")
+        print("✓ DEEPSEEK_API_KEY: Ada")
 
     # Check Semgrep
     result = subprocess.run(["semgrep", "--version"], capture_output=True, text=True)
@@ -95,7 +99,7 @@ Contoh:
     )
 
     parser.add_argument(
-        "--model", default="gpt-4o", help="Model OpenAI (default: gpt-4o)"
+        "--model", default="deepseek-v4-pro", help="Model DeepSeek (default: deepseek-v4-pro)"
     )
     parser.add_argument(
         "--target", default="vulnerable-samples/", help="Direktori target"

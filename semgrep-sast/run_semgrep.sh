@@ -6,6 +6,10 @@
 
 set -euo pipefail
 
+# Get script directory and project root (works regardless of where script is run from)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -17,9 +21,9 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # Default values
-TARGET_DIR="../vulnerable-samples"
-OUTPUT_DIR="../results"
-CUSTOM_RULES_DIR="./rules"
+TARGET_DIR="${PROJECT_ROOT}/vulnerable-samples"
+OUTPUT_DIR="${PROJECT_ROOT}/results"
+CUSTOM_RULES_DIR="${SCRIPT_DIR}/rules"
 OUTPUT_FORMAT="json"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
@@ -175,12 +179,12 @@ echo ""
 echo "─────────────────────────────────────────────────────────"
 echo -e "${BOLD}Membuat summary report...${NC}"
 
-python3 - << 'EOF'
+python3 - << 'PYEOF'
 import json
 import os
 from collections import defaultdict
 
-output_dir = "../results"
+output_dir = os.environ.get("OUTPUT_DIR", "../results")
 report_file = f"{output_dir}/semgrep_summary.txt"
 
 try:
@@ -251,7 +255,7 @@ with open(report_file, 'w') as f:
     f.write(report_content)
     
 print(f"\nReport disimpan ke: {report_file}")
-EOF
+PYEOF
 
 echo ""
 echo -e "${BOLD}${GREEN}✓ Semua scan selesai!${NC}"

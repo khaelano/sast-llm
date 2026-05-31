@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
 LLM-based SAST Analyzer
-Menganalisis kode untuk menemukan vulnerability menggunakan LLM (OpenAI GPT)
+Menganalisis kode untuk menemukan vulnerability menggunakan LLM (DeepSeek)
 """
 
-import os
-import json
 import argparse
+import json
+import os
 import time
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from dataclasses import dataclass, asdict
-from typing import Optional
+
+from dotenv import load_dotenv
 from openai import OpenAI
+
+load_dotenv()
 
 
 @dataclass
@@ -95,7 +98,7 @@ def detect_language(filepath: str) -> str:
     return ext_map.get(ext, "Unknown")
 
 
-def read_file_with_line_numbers(filepath: str) -> str:
+def read_file_with_line_numbers(filepath: str) -> tuple[str, int]:
     """Membaca file dan menambahkan nomor baris"""
     with open(filepath, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
@@ -108,7 +111,7 @@ def read_file_with_line_numbers(filepath: str) -> str:
 
 
 def analyze_file(
-    client: OpenAI, filepath: str, model: str = "gpt-4o"
+    client: OpenAI, filepath: str, model: str = "deepseek-v4-pro"
 ) -> AnalysisResult:
     """Analisis satu file menggunakan LLM"""
     print(f"  Menganalisis: {filepath}")
@@ -142,10 +145,13 @@ Berikan hasil analisis dalam format JSON array. Setiap elemen adalah satu vulner
         )
 
         duration = time.time() - start_time
-        tokens_used = response.usage.total_tokens
+        if response.usage is not None:
+            tokens_used = response.usage.total_tokens
+        else:
+            tokens_used = 0
 
         # Parse response
-        response_text = response.choices[0].message.content
+        response_text = response.choices[0].message.content or ""
         parsed = json.loads(response_text)
 
         # Handle berbagai format response
@@ -212,7 +218,7 @@ def scan_directory(
     client: OpenAI,
     directory: str,
     extensions: list[str] | None = None,
-    model: str = "gpt-4o",
+    model: str = "deepseek-v4-pro",
 ) -> list[AnalysisResult]:
     """Scan semua file dalam direktori"""
     if extensions is None:
@@ -312,7 +318,7 @@ Contoh penggunaan:
   python analyzer.py --dir vulnerable-samples/
 
   # Gunakan model tertentu dan simpan output
-  python analyzer.py --dir vulnerable-samples/ --model gpt-4o --output results/llm_results.json
+  python analyzer.py --dir vulnerable-samples/ --model deepseek-v4-pro --output results/llm_results.json
         """,
     )
 
@@ -322,9 +328,9 @@ Contoh penggunaan:
 
     parser.add_argument(
         "--model",
-        default="gpt-4o",
-        choices=["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
-        help="Model OpenAI yang digunakan (default: gpt-4o)",
+        default="deepseek-v4-pro",
+        choices=["deepseek-v4-flash", "deepseek-v4-pro"],
+        help="Model DeepSeek yang digunakan (default: deepseek-v4-pro)",
     )
     parser.add_argument(
         "--output",
@@ -340,14 +346,14 @@ Contoh penggunaan:
 
     args = parser.parse_args()
 
-    # Setup OpenAI client
-    api_key = os.environ.get("OPENAI_API_KEY")
+    # Setup DeepSeek client
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
-        print("Error: OPENAI_API_KEY environment variable tidak ditemukan!")
-        print("Set dengan: export OPENAI_API_KEY='your-api-key'")
+        print("Error: DEEPSEEK_API_KEY environment variable tidak ditemukan!")
+        print("Set dengan: export DEEPSEEK_API_KEY='your-api-key'")
         exit(1)
 
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
     print("=" * 60)
     print("LLM-based SAST Analyzer")

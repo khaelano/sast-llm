@@ -1,6 +1,6 @@
 # Hands-On SAST: LLM vs Semgrep
 
-Workshop membangun **Static Application Security Testing (SAST)** menggunakan LLM (OpenAI GPT-4), dibandingkan dengan **Semgrep** sebagai tool SAST berbasis aturan (rule-based).
+Workshop membangun **Static Application Security Testing (SAST)** menggunakan LLM (DeepSeek), dibandingkan dengan **Semgrep** sebagai tool SAST berbasis aturan (rule-based).
 
 ---
 
@@ -19,9 +19,8 @@ hands-on-sast/
 │       └── auth.js                   # JWT misuse, IDOR, Insecure Random
 │
 ├── llm-sast/                    # LLM-based SAST tool
-│   ├── analyzer.py                   # Main analyzer menggunakan OpenAI API
-│   ├── prompts.py                    # Prompt templates
-│   └── requirements.txt
+│   ├── analyzer.py                   # Main analyzer menggunakan DeepSeek API
+│   └── prompts.py                    # Prompt templates
 │
 ├── semgrep-sast/                # Semgrep configuration
 │   ├── rules/
@@ -44,53 +43,65 @@ hands-on-sast/
 
 ## Prasyarat
 
-### 1. Python 3.11+
+### 1. Python 3.14+
+
 ```bash
 python3 --version
 ```
 
-### 2. Install dependencies Python
+### 2. Install dependencies
+
 ```bash
+# Using uv (recommended)
+uv sync
+
+# Or using pip
 pip install openai python-dotenv rich pyyaml
 ```
 
 ### 3. Install Semgrep
+
 ```bash
 pip install semgrep
 # atau
 brew install semgrep
 ```
 
-### 4. OpenAI API Key
+### 4. DeepSeek API Key
+
+Buat file `.env` di root proyek:
+
 ```bash
-export OPENAI_API_KEY="sk-proj-..."
+cp .env.example .env
+# Edit .env: isi DEEPSEEK_API_KEY dengan API key kamu
 ```
 
-> **Catatan**: Buat file `.env` di root proyek untuk menyimpan API key:
-> ```
-> OPENAI_API_KEY=sk-proj-your-key-here
-> ```
+API key akan otomatis di-load dari `.env` — tidak perlu `export` manual.
 
 ---
 
 ## Quick Start
 
 ### Jalankan semua (LLM + Semgrep + Perbandingan)
+
 ```bash
 python run_all.py
 ```
 
 ### Jalankan hanya LLM SAST
+
 ```bash
-python run_all.py --only-llm --model gpt-4o
+python run_all.py --only-llm --model deepseek-v4-pro
 ```
 
 ### Jalankan hanya Semgrep
+
 ```bash
 python run_all.py --only-semgrep
 ```
 
 ### Buat laporan perbandingan (dari hasil yang sudah ada)
+
 ```bash
 python run_all.py --only-compare
 ```
@@ -120,35 +131,40 @@ Buka dan baca file-file sample berikut:
 ### MODUL 2: Menjalankan LLM SAST
 
 #### 2.1 Analisis satu file
+
 ```bash
 python llm-sast/analyzer.py \
   --file vulnerable-samples/python/sql_injection.py \
-  --model gpt-4o \
+  --model deepseek-v4-pro \
   --output results/llm_sql.json
 ```
 
 #### 2.2 Analisis seluruh direktori
+
 ```bash
 python llm-sast/analyzer.py \
   --dir vulnerable-samples/ \
-  --model gpt-4o \
+  --model deepseek-v4-pro \
   --output results/llm_results.json
 ```
 
-#### 2.3 Gunakan model yang lebih hemat
+#### 2.3 Gunakan model yang lebih cepat
+
 ```bash
 python llm-sast/analyzer.py \
   --dir vulnerable-samples/ \
-  --model gpt-4o-mini \
-  --output results/llm_results_mini.json
+  --model deepseek-v4-flash \
+  --output results/llm_results_flash.json
 ```
 
 #### 2.4 Lihat hasil
+
 ```bash
 cat results/llm_results.json | python3 -m json.tool | head -100
 ```
 
 **Contoh output LLM:**
+
 ```json
 {
   "tool": "LLM SAST Analyzer",
@@ -179,6 +195,7 @@ cat results/llm_results.json | python3 -m json.tool | head -100
 ### MODUL 3: Menjalankan Semgrep
 
 #### 3.1 Scan dengan OWASP Top 10 rules
+
 ```bash
 semgrep --config p/owasp-top-ten \
   --output results/semgrep_owasp.json \
@@ -187,6 +204,7 @@ semgrep --config p/owasp-top-ten \
 ```
 
 #### 3.2 Scan dengan rules Python
+
 ```bash
 semgrep --config p/python \
   --output results/semgrep_python.json \
@@ -195,6 +213,7 @@ semgrep --config p/python \
 ```
 
 #### 3.3 Scan dengan custom rules kita
+
 ```bash
 semgrep --config semgrep-sast/rules/ \
   --output results/semgrep_custom.json \
@@ -203,16 +222,19 @@ semgrep --config semgrep-sast/rules/ \
 ```
 
 #### 3.4 Scan lengkap (semua rules)
+
 ```bash
 bash semgrep-sast/run_semgrep.sh
 ```
 
 #### 3.5 Output teks (langsung di terminal)
+
 ```bash
 semgrep --config p/owasp-top-ten vulnerable-samples/
 ```
 
 **Contoh output Semgrep:**
+
 ```
 vulnerable-samples/python/sql_injection.py
   sql-injection-f-string (line 28)
@@ -233,6 +255,7 @@ python comparison/compare.py \
 ```
 
 Kemudian buka laporan HTML di browser:
+
 ```bash
 open results/comparison_report.html
 ```
@@ -256,6 +279,7 @@ rules:
 ```
 
 Test rule:
+
 ```bash
 semgrep --config semgrep-sast/rules/my-custom-rule.yaml vulnerable-samples/python/
 ```
@@ -300,41 +324,52 @@ semgrep --config semgrep-sast/rules/my-custom-rule.yaml vulnerable-samples/pytho
 
 ## Variasi Eksperimen
 
-### Eksperimen 1: Bandingkan model GPT-4o vs GPT-4o-mini
+### Eksperimen 1: Bandingkan model DeepSeek V4 Pro vs V4 Flash
+
 ```bash
-python llm-sast/analyzer.py --dir vulnerable-samples/ --model gpt-4o --output results/gpt4o.json
-python llm-sast/analyzer.py --dir vulnerable-samples/ --model gpt-4o-mini --output results/gpt4o_mini.json
+python llm-sast/analyzer.py --dir vulnerable-samples/ --model deepseek-v4-pro --output results/v4_pro.json
+python llm-sast/analyzer.py --dir vulnerable-samples/ --model deepseek-v4-flash --output results/v4_flash.json
 ```
 
 ### Eksperimen 2: Tulis custom Semgrep rule untuk setiap vuln
+
 Baca `vulnerable-samples/python/sql_injection.py` dan tulis rule yang tepat untuk mendeteksi setiap pola.
 
 ### Eksperimen 3: Tambah kode vulnerable baru
+
 Buat file baru di `vulnerable-samples/` dan lihat apakah kedua tool dapat mendeteksinya.
 
 ### Eksperimen 4: Test false positive rate
+
 Modifikasi kode vulnerable menjadi secure, dan periksa apakah tool masih memberi alert.
 
 ---
 
 ## Troubleshooting
 
-### Error: `OPENAI_API_KEY not found`
+### Error: `DEEPSEEK_API_KEY not found`
+
 ```bash
-export OPENAI_API_KEY="sk-proj-..."
+cp .env.example .env
+# Edit .env dan isi DEEPSEEK_API_KEY
 ```
 
 ### Error: `semgrep: command not found`
+
 ```bash
 pip install semgrep
 ```
 
 ### Error: `ModuleNotFoundError: No module named 'openai'`
+
 ```bash
-pip install -r llm-sast/requirements.txt
+uv sync
+# atau
+pip install openai python-dotenv rich pyyaml
 ```
 
 ### Semgrep scan sangat lambat
+
 ```bash
 # Tambahkan --timeout dan --max-memory
 semgrep --config p/owasp-top-ten --timeout 30 vulnerable-samples/
@@ -348,7 +383,7 @@ semgrep --config p/owasp-top-ten --timeout 30 vulnerable-samples/
 - [CWE Top 25](https://cwe.mitre.org/top25/)
 - [Semgrep Documentation](https://semgrep.dev/docs/)
 - [Semgrep Registry](https://semgrep.dev/explore)
-- [OpenAI API](https://platform.openai.com/docs/)
+- [DeepSeek API](https://platform.deepseek.com/docs/)
 - [SANS Top 25 Software Errors](https://www.sans.org/top25-software-errors/)
 
 ---
