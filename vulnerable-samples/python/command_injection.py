@@ -19,10 +19,7 @@ def get_file_info_vulnerable(filename):
     """Mendapatkan info file - RENTAN"""
     # VULNERABILITY: shell=True + input langsung = command injection
     result = subprocess.run(
-        "file " + filename,
-        shell=True,
-        capture_output=True,
-        text=True
+        "file " + filename, shell=True, capture_output=True, text=True
     )
     return result.stdout
 
@@ -48,15 +45,13 @@ def ping_host_secure(hostname):
     """Ping sebuah host - AMAN"""
     # Validasi input terlebih dahulu
     import re
-    if not re.match(r'^[a-zA-Z0-9.\-]+$', hostname):
+
+    if not re.match(r"^[a-zA-Z0-9.\-]+$", hostname):
         raise ValueError("Invalid hostname")
-    
+
     # SECURE: Argument list, bukan string, tanpa shell=True
     result = subprocess.run(
-        ["ping", "-c", "4", hostname],
-        capture_output=True,
-        text=True,
-        timeout=10
+        ["ping", "-c", "4", hostname], capture_output=True, text=True, timeout=10
     )
     return result.stdout
 
@@ -65,12 +60,9 @@ def ping_host_secure(hostname):
 def get_file_info_secure(filename):
     """Mendapatkan info file - AMAN"""
     import shlex
+
     # SECURE: Argument list tanpa shell=True
-    result = subprocess.run(
-        ["file", filename],
-        capture_output=True,
-        text=True
-    )
+    result = subprocess.run(["file", filename], capture_output=True, text=True)
     return result.stdout
 
 

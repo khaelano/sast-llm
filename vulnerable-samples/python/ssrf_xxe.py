@@ -17,6 +17,7 @@ app = Flask(__name__)
 # SERVER-SIDE REQUEST FORGERY (SSRF)
 # ============================================================
 
+
 # ===== VULNERABLE: SSRF =====
 def fetch_url_vulnerable(url):
     """Mengambil konten dari URL - RENTAN terhadap SSRF"""
@@ -50,11 +51,11 @@ def fetch_url_secure(url):
     import ipaddress
 
     parsed = urlparse(url)
-    
+
     # Whitelist skema yang diizinkan
     if parsed.scheme not in ("http", "https"):
         raise ValueError("Only HTTP/HTTPS URLs are allowed")
-    
+
     # Blokir akses ke IP internal
     hostname = parsed.hostname
     try:
@@ -63,12 +64,12 @@ def fetch_url_secure(url):
             raise ValueError("Access to internal IPs is not allowed")
     except ValueError:
         pass  # Bukan IP, lanjutkan
-    
+
     # Whitelist domain yang diizinkan
     allowed_domains = ["api.trusted-service.com", "cdn.example.com"]
     if hostname not in allowed_domains:
         raise ValueError(f"Domain {hostname} is not in the allowlist")
-    
+
     response = requests.get(url, timeout=10)
     return response.text
 
@@ -76,6 +77,7 @@ def fetch_url_secure(url):
 # ============================================================
 # XML EXTERNAL ENTITY (XXE)
 # ============================================================
+
 
 # ===== VULNERABLE: XXE =====
 def parse_xml_vulnerable(xml_content):
@@ -94,11 +96,7 @@ def parse_xml_vulnerable(xml_content):
 def parse_xml_secure(xml_content):
     """Parse XML - AMAN dengan menonaktifkan external entities"""
     # SECURE: resolve_entities=False mencegah XXE
-    parser = etree.XMLParser(
-        resolve_entities=False,
-        no_network=True,
-        load_dtd=False
-    )
+    parser = etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False)
     root = etree.fromstring(xml_content.encode(), parser)
     return etree.tostring(root)
 
@@ -106,6 +104,7 @@ def parse_xml_secure(xml_content):
 # ============================================================
 # OPEN REDIRECT
 # ============================================================
+
 
 # ===== VULNERABLE: Open Redirect =====
 @app.route("/redirect")
@@ -122,14 +121,14 @@ def redirect_vulnerable():
 def redirect_secure():
     """Redirect endpoint - AMAN"""
     from urllib.parse import urlparse
-    
+
     next_url = flask_request.args.get("next", "/")
     parsed = urlparse(next_url)
-    
+
     # Hanya izinkan redirect internal (tanpa domain)
     if parsed.netloc:
         return redirect("/")
-    
+
     return redirect(next_url)
 
 

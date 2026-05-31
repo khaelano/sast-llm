@@ -17,22 +17,24 @@ from openai import OpenAI
 @dataclass
 class Vulnerability:
     """Representasi sebuah vulnerability yang ditemukan"""
+
     file: str
     line_start: int
     line_end: int
-    severity: str          # CRITICAL, HIGH, MEDIUM, LOW, INFO
-    category: str          # OWASP kategori
-    cwe_id: str            # CWE ID (e.g., CWE-89)
+    severity: str  # CRITICAL, HIGH, MEDIUM, LOW, INFO
+    category: str  # OWASP kategori
+    cwe_id: str  # CWE ID (e.g., CWE-89)
     title: str
     description: str
     vulnerable_code: str
     remediation: str
-    confidence: str        # HIGH, MEDIUM, LOW
+    confidence: str  # HIGH, MEDIUM, LOW
 
 
 @dataclass
 class AnalysisResult:
     """Hasil analisis sebuah file"""
+
     file: str
     language: str
     total_lines: int
@@ -78,40 +80,42 @@ Jika tidak ada vulnerability, kembalikan array kosong: []
 def detect_language(filepath: str) -> str:
     """Deteksi bahasa pemrograman dari ekstensi file"""
     ext_map = {
-        '.py': 'Python',
-        '.js': 'JavaScript',
-        '.ts': 'TypeScript',
-        '.java': 'Java',
-        '.go': 'Go',
-        '.rb': 'Ruby',
-        '.php': 'PHP',
-        '.cs': 'C#',
-        '.cpp': 'C++',
-        '.c': 'C',
+        ".py": "Python",
+        ".js": "JavaScript",
+        ".ts": "TypeScript",
+        ".java": "Java",
+        ".go": "Go",
+        ".rb": "Ruby",
+        ".php": "PHP",
+        ".cs": "C#",
+        ".cpp": "C++",
+        ".c": "C",
     }
     ext = Path(filepath).suffix.lower()
-    return ext_map.get(ext, 'Unknown')
+    return ext_map.get(ext, "Unknown")
 
 
 def read_file_with_line_numbers(filepath: str) -> str:
     """Membaca file dan menambahkan nomor baris"""
-    with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
-    
+
     numbered_lines = []
     for i, line in enumerate(lines, 1):
         numbered_lines.append(f"{i:4d} | {line.rstrip()}")
-    
-    return '\n'.join(numbered_lines), len(lines)
+
+    return "\n".join(numbered_lines), len(lines)
 
 
-def analyze_file(client: OpenAI, filepath: str, model: str = "gpt-4o") -> AnalysisResult:
+def analyze_file(
+    client: OpenAI, filepath: str, model: str = "gpt-4o"
+) -> AnalysisResult:
     """Analisis satu file menggunakan LLM"""
     print(f"  Menganalisis: {filepath}")
-    
+
     language = detect_language(filepath)
     code_with_lines, total_lines = read_file_with_line_numbers(filepath)
-    
+
     user_prompt = f"""Analisis kode {language} berikut untuk menemukan kerentanan keamanan:
 
 File: {filepath}
@@ -125,59 +129,59 @@ Total baris: {total_lines}
 Berikan hasil analisis dalam format JSON array. Setiap elemen adalah satu vulnerability."""
 
     start_time = time.time()
-    
+
     try:
         response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
             response_format={"type": "json_object"},
             temperature=0.1,  # Rendah untuk konsistensi
         )
-        
+
         duration = time.time() - start_time
         tokens_used = response.usage.total_tokens
-        
+
         # Parse response
         response_text = response.choices[0].message.content
         parsed = json.loads(response_text)
-        
+
         # Handle berbagai format response
         if isinstance(parsed, list):
             vulns_raw = parsed
         elif isinstance(parsed, dict):
             # LLM mungkin membungkus dalam key
             vulns_raw = (
-                parsed.get('vulnerabilities') or
-                parsed.get('findings') or
-                parsed.get('results') or
-                []
+                parsed.get("vulnerabilities")
+                or parsed.get("findings")
+                or parsed.get("results")
+                or []
             )
         else:
             vulns_raw = []
-        
+
         vulnerabilities = []
         for v in vulns_raw:
             try:
                 vuln = Vulnerability(
                     file=filepath,
-                    line_start=int(v.get('line_start', 0)),
-                    line_end=int(v.get('line_end', 0)),
-                    severity=v.get('severity', 'MEDIUM').upper(),
-                    category=v.get('category', 'Unknown'),
-                    cwe_id=v.get('cwe_id', ''),
-                    title=v.get('title', ''),
-                    description=v.get('description', ''),
-                    vulnerable_code=v.get('vulnerable_code', ''),
-                    remediation=v.get('remediation', ''),
-                    confidence=v.get('confidence', 'MEDIUM').upper(),
+                    line_start=int(v.get("line_start", 0)),
+                    line_end=int(v.get("line_end", 0)),
+                    severity=v.get("severity", "MEDIUM").upper(),
+                    category=v.get("category", "Unknown"),
+                    cwe_id=v.get("cwe_id", ""),
+                    title=v.get("title", ""),
+                    description=v.get("description", ""),
+                    vulnerable_code=v.get("vulnerable_code", ""),
+                    remediation=v.get("remediation", ""),
+                    confidence=v.get("confidence", "MEDIUM").upper(),
                 )
                 vulnerabilities.append(vuln)
             except (KeyError, ValueError) as e:
                 print(f"    Warning: Gagal parse vulnerability: {e}")
-        
+
         return AnalysisResult(
             file=filepath,
             language=language,
@@ -187,7 +191,7 @@ Berikan hasil analisis dalam format JSON array. Setiap elemen adalah satu vulner
             model_used=model,
             tokens_used=tokens_used,
         )
-    
+
     except json.JSONDecodeError as e:
         print(f"    Error: Gagal parse JSON response: {e}")
         return AnalysisResult(
@@ -208,31 +212,33 @@ def scan_directory(
     client: OpenAI,
     directory: str,
     extensions: list[str] | None = None,
-    model: str = "gpt-4o"
+    model: str = "gpt-4o",
 ) -> list[AnalysisResult]:
     """Scan semua file dalam direktori"""
     if extensions is None:
-        extensions = ['.py', '.js', '.ts', '.java', '.go', '.rb', '.php']
-    
+        extensions = [".py", ".js", ".ts", ".java", ".go", ".rb", ".php"]
+
     results = []
     path = Path(directory)
-    
-    files = [f for f in path.rglob('*') if f.is_file() and f.suffix in extensions]
-    
+
+    files = [f for f in path.rglob("*") if f.is_file() and f.suffix in extensions]
+
     print(f"\nMenemukan {len(files)} file untuk dianalisis...")
     print("-" * 60)
-    
+
     for i, filepath in enumerate(files, 1):
         print(f"\n[{i}/{len(files)}] ", end="")
         result = analyze_file(client, str(filepath), model)
         results.append(result)
-        
+
         # Tampilkan ringkasan
         vuln_count = len(result.vulnerabilities)
-        print(f"    Ditemukan {vuln_count} vulnerability | "
-              f"{result.scan_duration_seconds}s | "
-              f"{result.tokens_used} tokens")
-    
+        print(
+            f"    Ditemukan {vuln_count} vulnerability | "
+            f"{result.scan_duration_seconds}s | "
+            f"{result.tokens_used} tokens"
+        )
+
     return results
 
 
@@ -242,12 +248,12 @@ def print_summary(results: list[AnalysisResult]):
     total_vulns = sum(len(r.vulnerabilities) for r in results)
     total_tokens = sum(r.tokens_used for r in results)
     total_time = sum(r.scan_duration_seconds for r in results)
-    
-    severity_counts = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0, 'INFO': 0}
+
+    severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
     for result in results:
         for vuln in result.vulnerabilities:
             severity_counts[vuln.severity] = severity_counts.get(vuln.severity, 0) + 1
-    
+
     print("\n" + "=" * 60)
     print("RINGKASAN HASIL SCAN (LLM SAST)")
     print("=" * 60)
@@ -260,15 +266,17 @@ def print_summary(results: list[AnalysisResult]):
     for sev, count in severity_counts.items():
         bar = "█" * count
         print(f"  {sev:<10} : {count:3d} {bar}")
-    
+
     print()
     print("Detail per File:")
     for result in results:
         if result.vulnerabilities:
             print(f"\n  {result.file}")
             for vuln in result.vulnerabilities:
-                print(f"    [{vuln.severity}] Line {vuln.line_start}-{vuln.line_end}: "
-                      f"{vuln.title} ({vuln.cwe_id})")
+                print(
+                    f"    [{vuln.severity}] Line {vuln.line_start}-{vuln.line_end}: "
+                    f"{vuln.title} ({vuln.cwe_id})"
+                )
 
 
 def save_results(results: list[AnalysisResult], output_file: str):
@@ -278,22 +286,22 @@ def save_results(results: list[AnalysisResult], output_file: str):
         "scan_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "total_files": len(results),
         "total_vulnerabilities": sum(len(r.vulnerabilities) for r in results),
-        "results": []
+        "results": [],
     }
-    
+
     for result in results:
         result_dict = asdict(result)
         output["results"].append(result_dict)
-    
-    with open(output_file, 'w', encoding='utf-8') as f:
+
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
-    
+
     print(f"\nHasil disimpan ke: {output_file}")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='LLM-based SAST Analyzer',
+        description="LLM-based SAST Analyzer",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Contoh penggunaan:
@@ -305,67 +313,64 @@ Contoh penggunaan:
 
   # Gunakan model tertentu dan simpan output
   python analyzer.py --dir vulnerable-samples/ --model gpt-4o --output results/llm_results.json
-        """
+        """,
     )
-    
+
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--file', help='Path ke file yang akan dianalisis')
-    group.add_argument('--dir', help='Path ke direktori yang akan di-scan')
-    
+    group.add_argument("--file", help="Path ke file yang akan dianalisis")
+    group.add_argument("--dir", help="Path ke direktori yang akan di-scan")
+
     parser.add_argument(
-        '--model',
-        default='gpt-4o',
-        choices=['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-        help='Model OpenAI yang digunakan (default: gpt-4o)'
+        "--model",
+        default="gpt-4o",
+        choices=["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
+        help="Model OpenAI yang digunakan (default: gpt-4o)",
     )
     parser.add_argument(
-        '--output',
-        default='results/llm_results.json',
-        help='File output JSON (default: results/llm_results.json)'
+        "--output",
+        default="results/llm_results.json",
+        help="File output JSON (default: results/llm_results.json)",
     )
     parser.add_argument(
-        '--extensions',
-        nargs='+',
-        default=['.py', '.js', '.ts'],
-        help='Ekstensi file yang akan di-scan (default: .py .js .ts)'
+        "--extensions",
+        nargs="+",
+        default=[".py", ".js", ".ts"],
+        help="Ekstensi file yang akan di-scan (default: .py .js .ts)",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Setup OpenAI client
-    api_key = os.environ.get('OPENAI_API_KEY')
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         print("Error: OPENAI_API_KEY environment variable tidak ditemukan!")
         print("Set dengan: export OPENAI_API_KEY='your-api-key'")
         exit(1)
-    
+
     client = OpenAI(api_key=api_key)
-    
+
     print("=" * 60)
     print("LLM-based SAST Analyzer")
     print(f"Model: {args.model}")
     print("=" * 60)
-    
+
     # Buat direktori output jika belum ada
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
-    
+
     results = []
-    
+
     if args.file:
         print(f"\nMenganalisis file: {args.file}")
         result = analyze_file(client, args.file, args.model)
         results = [result]
     else:
         results = scan_directory(
-            client,
-            args.dir,
-            extensions=args.extensions,
-            model=args.model
+            client, args.dir, extensions=args.extensions, model=args.model
         )
-    
+
     print_summary(results)
     save_results(results, args.output)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

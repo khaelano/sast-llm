@@ -144,7 +144,10 @@ Format JSON sama seperti format standar."""
 # USER PROMPT TEMPLATES
 # =========================================================
 
-def build_user_prompt(filepath: str, language: str, code_with_lines: str, total_lines: int) -> str:
+
+def build_user_prompt(
+    filepath: str, language: str, code_with_lines: str, total_lines: int
+) -> str:
     """Build user prompt untuk analisis file"""
     return f"""Analisis kode {language} berikut untuk menemukan kerentanan keamanan:
 
@@ -173,8 +176,8 @@ Kembalikan JSON array dari vulnerability yang ditemukan."""
 
 def build_review_prompt(pr_description: str, files_changed: list) -> str:
     """Build prompt untuk code review PR"""
-    files_list = '\n'.join(f'- {f}' for f in files_changed)
-    
+    files_list = "\n".join(f"- {f}" for f in files_changed)
+
     return f"""Review security untuk Pull Request berikut:
 
 Deskripsi PR:
@@ -205,11 +208,11 @@ OWASP_TOP10_2021 = {
 }
 
 COMMON_CWE = {
-    "CWE-89":  "SQL Injection",
-    "CWE-79":  "Cross-site Scripting (XSS)",
-    "CWE-78":  "OS Command Injection",
-    "CWE-22":  "Path Traversal",
-    "CWE-94":  "Code Injection",
+    "CWE-89": "SQL Injection",
+    "CWE-79": "Cross-site Scripting (XSS)",
+    "CWE-78": "OS Command Injection",
+    "CWE-22": "Path Traversal",
+    "CWE-94": "Code Injection",
     "CWE-798": "Use of Hard-coded Credentials",
     "CWE-327": "Use of Broken Algorithm",
     "CWE-338": "Use of Cryptographically Weak PRNG",
@@ -224,9 +227,9 @@ COMMON_CWE = {
 
 SEVERITY_COLORS = {
     "CRITICAL": "\033[1;35m",  # Bright magenta
-    "HIGH":     "\033[1;31m",  # Bright red
-    "MEDIUM":   "\033[1;33m",  # Bright yellow
-    "LOW":      "\033[1;34m",  # Bright blue
-    "INFO":     "\033[1;37m",  # Bright white
-    "RESET":    "\033[0m",
+    "HIGH": "\033[1;31m",  # Bright red
+    "MEDIUM": "\033[1;33m",  # Bright yellow
+    "LOW": "\033[1;34m",  # Bright blue
+    "INFO": "\033[1;37m",  # Bright white
+    "RESET": "\033[0m",
 }

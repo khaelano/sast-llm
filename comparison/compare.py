@@ -16,7 +16,8 @@ from typing import Optional
 @dataclass
 class Finding:
     """Representasi unified finding dari berbagai tools"""
-    tool: str           # "llm" atau "semgrep"
+
+    tool: str  # "llm" atau "semgrep"
     file: str
     line_start: int
     line_end: int
@@ -25,97 +26,101 @@ class Finding:
     cwe_id: str
     title: str
     description: str
-    rule_id: str        # Rule ID (untuk semgrep) atau judul (untuk LLM)
+    rule_id: str  # Rule ID (untuk semgrep) atau judul (untuk LLM)
 
 
 def load_llm_results(filepath: str) -> list[Finding]:
     """Load hasil dari LLM SAST analyzer"""
     findings = []
-    
-    with open(filepath, 'r', encoding='utf-8') as f:
+
+    with open(filepath, "r", encoding="utf-8") as f:
         data = json.load(f)
-    
-    for file_result in data.get('results', []):
-        filename = os.path.basename(file_result.get('file', ''))
-        for vuln in file_result.get('vulnerabilities', []):
+
+    for file_result in data.get("results", []):
+        filename = os.path.basename(file_result.get("file", ""))
+        for vuln in file_result.get("vulnerabilities", []):
             finding = Finding(
                 tool="LLM",
                 file=filename,
-                line_start=vuln.get('line_start', 0),
-                line_end=vuln.get('line_end', 0),
-                severity=vuln.get('severity', 'MEDIUM').upper(),
-                category=vuln.get('category', 'Unknown'),
-                cwe_id=vuln.get('cwe_id', ''),
-                title=vuln.get('title', ''),
-                description=vuln.get('description', ''),
-                rule_id=vuln.get('cwe_id', vuln.get('title', 'unknown')),
+                line_start=vuln.get("line_start", 0),
+                line_end=vuln.get("line_end", 0),
+                severity=vuln.get("severity", "MEDIUM").upper(),
+                category=vuln.get("category", "Unknown"),
+                cwe_id=vuln.get("cwe_id", ""),
+                title=vuln.get("title", ""),
+                description=vuln.get("description", ""),
+                rule_id=vuln.get("cwe_id", vuln.get("title", "unknown")),
             )
             findings.append(finding)
-    
+
     return findings
 
 
 def load_semgrep_results(filepath: str) -> list[Finding]:
     """Load hasil dari Semgrep scan"""
     findings = []
-    
-    with open(filepath, 'r', encoding='utf-8') as f:
+
+    with open(filepath, "r", encoding="utf-8") as f:
         data = json.load(f)
-    
-    for result in data.get('results', []):
-        extra = result.get('extra', {})
-        metadata = extra.get('metadata', {})
-        
+
+    for result in data.get("results", []):
+        extra = result.get("extra", {})
+        metadata = extra.get("metadata", {})
+
         # Normalisasi severity
         severity_map = {
-            'error': 'HIGH',
-            'warning': 'MEDIUM',
-            'info': 'INFO',
+            "error": "HIGH",
+            "warning": "MEDIUM",
+            "info": "INFO",
         }
-        raw_severity = extra.get('severity', 'warning').lower()
+        raw_severity = extra.get("severity", "warning").lower()
         severity = severity_map.get(raw_severity, raw_severity.upper())
-        
+
         finding = Finding(
             tool="Semgrep",
-            file=os.path.basename(result.get('path', '')),
-            line_start=result.get('start', {}).get('line', 0),
-            line_end=result.get('end', {}).get('line', 0),
+            file=os.path.basename(result.get("path", "")),
+            line_start=result.get("start", {}).get("line", 0),
+            line_end=result.get("end", {}).get("line", 0),
             severity=severity,
-            category=metadata.get('category', _infer_category(result.get('check_id', ''))),
-            cwe_id=metadata.get('cwe', ''),
-            title=result.get('check_id', '').split('.')[-1].replace('-', ' ').title(),
-            description=extra.get('message', ''),
-            rule_id=result.get('check_id', ''),
+            category=metadata.get(
+                "category", _infer_category(result.get("check_id", ""))
+            ),
+            cwe_id=metadata.get("cwe", ""),
+            title=result.get("check_id", "").split(".")[-1].replace("-", " ").title(),
+            description=extra.get("message", ""),
+            rule_id=result.get("check_id", ""),
         )
         findings.append(finding)
-    
+
     return findings
 
 
 def _infer_category(rule_id: str) -> str:
     """Inferensi kategori dari rule ID"""
     rule_lower = rule_id.lower()
-    if 'sql' in rule_lower:
-        return 'SQL Injection'
-    elif 'xss' in rule_lower or 'html' in rule_lower:
-        return 'Cross-Site Scripting'
-    elif 'command' in rule_lower or 'exec' in rule_lower or 'injection' in rule_lower:
-        return 'Command Injection'
-    elif 'path' in rule_lower or 'traversal' in rule_lower:
-        return 'Path Traversal'
-    elif 'secret' in rule_lower or 'password' in rule_lower or 'credential' in rule_lower:
-        return 'Hardcoded Secrets'
-    elif 'jwt' in rule_lower or 'auth' in rule_lower:
-        return 'Authentication Failure'
-    elif 'crypto' in rule_lower or 'hash' in rule_lower or 'random' in rule_lower:
-        return 'Cryptographic Failure'
-    elif 'pickle' in rule_lower or 'deserializ' in rule_lower or 'yaml' in rule_lower:
-        return 'Insecure Deserialization'
-    elif 'ssrf' in rule_lower or 'request' in rule_lower:
-        return 'SSRF'
-    elif 'eval' in rule_lower:
-        return 'Code Injection'
-    return 'Security Misconfiguration'
+    if "sql" in rule_lower:
+        return "SQL Injection"
+    elif "xss" in rule_lower or "html" in rule_lower:
+        return "Cross-Site Scripting"
+    elif "command" in rule_lower or "exec" in rule_lower or "injection" in rule_lower:
+        return "Command Injection"
+    elif "path" in rule_lower or "traversal" in rule_lower:
+        return "Path Traversal"
+    elif (
+        "secret" in rule_lower or "password" in rule_lower or "credential" in rule_lower
+    ):
+        return "Hardcoded Secrets"
+    elif "jwt" in rule_lower or "auth" in rule_lower:
+        return "Authentication Failure"
+    elif "crypto" in rule_lower or "hash" in rule_lower or "random" in rule_lower:
+        return "Cryptographic Failure"
+    elif "pickle" in rule_lower or "deserializ" in rule_lower or "yaml" in rule_lower:
+        return "Insecure Deserialization"
+    elif "ssrf" in rule_lower or "request" in rule_lower:
+        return "SSRF"
+    elif "eval" in rule_lower:
+        return "Code Injection"
+    return "Security Misconfiguration"
 
 
 def find_overlaps(llm_findings: list[Finding], semgrep_findings: list[Finding]) -> dict:
@@ -129,27 +134,27 @@ def find_overlaps(llm_findings: list[Finding], semgrep_findings: list[Finding]) 
     overlaps = []
     llm_only = []
     semgrep_only = list(semgrep_findings)
-    
+
     used_semgrep = set()
-    
+
     for llm in llm_findings:
         matched = False
         for i, sg in enumerate(semgrep_findings):
             if i in used_semgrep:
                 continue
-            
+
             # Cek apakah file sama
             if llm.file != sg.file:
                 continue
-            
+
             # Cek apakah kategori/CWE mirip
             category_match = (
                 llm.cwe_id and sg.cwe_id and llm.cwe_id == sg.cwe_id
             ) or _categories_similar(llm.category, sg.category)
-            
+
             if not category_match:
                 continue
-            
+
             # Cek apakah baris berdekatan
             line_diff = abs(llm.line_start - sg.line_start)
             if line_diff <= 15:
@@ -157,67 +162,80 @@ def find_overlaps(llm_findings: list[Finding], semgrep_findings: list[Finding]) 
                 used_semgrep.add(i)
                 matched = True
                 break
-        
+
         if not matched:
             llm_only.append(llm)
-    
-    semgrep_only = [sg for i, sg in enumerate(semgrep_findings) if i not in used_semgrep]
-    
+
+    semgrep_only = [
+        sg for i, sg in enumerate(semgrep_findings) if i not in used_semgrep
+    ]
+
     return {
-        'overlaps': overlaps,
-        'llm_only': llm_only,
-        'semgrep_only': semgrep_only,
+        "overlaps": overlaps,
+        "llm_only": llm_only,
+        "semgrep_only": semgrep_only,
     }
 
 
 def _categories_similar(cat1: str, cat2: str) -> bool:
     """Cek apakah dua kategori merujuk hal yang sama"""
     keywords = {
-        'sql': ['sql injection', 'sqli', 'sql'],
-        'xss': ['xss', 'cross-site scripting', 'html injection'],
-        'cmd': ['command injection', 'os command', 'shell injection', 'code injection'],
-        'path': ['path traversal', 'directory traversal', 'path'],
-        'secret': ['hardcoded', 'credential', 'secret', 'password', 'api key'],
-        'auth': ['authentication', 'authorization', 'jwt', 'session', 'idor', 'access control'],
-        'crypto': ['cryptographic', 'weak hash', 'md5', 'sha1', 'random'],
-        'deser': ['deserialization', 'pickle', 'yaml'],
-        'ssrf': ['ssrf', 'server-side request', 'request forgery'],
+        "sql": ["sql injection", "sqli", "sql"],
+        "xss": ["xss", "cross-site scripting", "html injection"],
+        "cmd": ["command injection", "os command", "shell injection", "code injection"],
+        "path": ["path traversal", "directory traversal", "path"],
+        "secret": ["hardcoded", "credential", "secret", "password", "api key"],
+        "auth": [
+            "authentication",
+            "authorization",
+            "jwt",
+            "session",
+            "idor",
+            "access control",
+        ],
+        "crypto": ["cryptographic", "weak hash", "md5", "sha1", "random"],
+        "deser": ["deserialization", "pickle", "yaml"],
+        "ssrf": ["ssrf", "server-side request", "request forgery"],
     }
-    
+
     cat1_lower = cat1.lower()
     cat2_lower = cat2.lower()
-    
+
     for group_keywords in keywords.values():
         in_cat1 = any(kw in cat1_lower for kw in group_keywords)
         in_cat2 = any(kw in cat2_lower for kw in group_keywords)
         if in_cat1 and in_cat2:
             return True
-    
+
     return False
 
 
 def calculate_metrics(analysis: dict, llm_total: int, semgrep_total: int) -> dict:
     """Hitung metrik perbandingan"""
-    overlap_count = len(analysis['overlaps'])
-    llm_only_count = len(analysis['llm_only'])
-    semgrep_only_count = len(analysis['semgrep_only'])
-    
+    overlap_count = len(analysis["overlaps"])
+    llm_only_count = len(analysis["llm_only"])
+    semgrep_only_count = len(analysis["semgrep_only"])
+
     # Precision & Recall (estimasi)
     # Asumsikan union keduanya sebagai "ground truth" yang mungkin
     union = overlap_count + llm_only_count + semgrep_only_count
-    
+
     metrics = {
-        'llm_total_findings': llm_total,
-        'semgrep_total_findings': semgrep_total,
-        'overlapping_findings': overlap_count,
-        'llm_unique_findings': llm_only_count,
-        'semgrep_unique_findings': semgrep_only_count,
-        'total_unique_findings': union,
-        'agreement_rate': round(overlap_count / max(union, 1) * 100, 1),
-        'llm_coverage': round((overlap_count + llm_only_count) / max(union, 1) * 100, 1),
-        'semgrep_coverage': round((overlap_count + semgrep_only_count) / max(union, 1) * 100, 1),
+        "llm_total_findings": llm_total,
+        "semgrep_total_findings": semgrep_total,
+        "overlapping_findings": overlap_count,
+        "llm_unique_findings": llm_only_count,
+        "semgrep_unique_findings": semgrep_only_count,
+        "total_unique_findings": union,
+        "agreement_rate": round(overlap_count / max(union, 1) * 100, 1),
+        "llm_coverage": round(
+            (overlap_count + llm_only_count) / max(union, 1) * 100, 1
+        ),
+        "semgrep_coverage": round(
+            (overlap_count + semgrep_only_count) / max(union, 1) * 100, 1
+        ),
     }
-    
+
     return metrics
 
 
@@ -226,10 +244,10 @@ def generate_report(
     semgrep_findings: list[Finding],
     analysis: dict,
     metrics: dict,
-    output_file: str
+    output_file: str,
 ):
     """Generate laporan perbandingan komprehensif dalam format HTML"""
-    
+
     html_content = f"""<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -322,27 +340,27 @@ def generate_report(
     <!-- Stats Overview -->
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-number stat-llm">{metrics['llm_total_findings']}</div>
+            <div class="stat-number stat-llm">{metrics["llm_total_findings"]}</div>
             <div class="stat-label">LLM Findings</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number stat-semgrep">{metrics['semgrep_total_findings']}</div>
+            <div class="stat-number stat-semgrep">{metrics["semgrep_total_findings"]}</div>
             <div class="stat-label">Semgrep Findings</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number stat-overlap">{metrics['overlapping_findings']}</div>
+            <div class="stat-number stat-overlap">{metrics["overlapping_findings"]}</div>
             <div class="stat-label">Overlapping</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number stat-total">{metrics['llm_unique_findings']}</div>
+            <div class="stat-number stat-total">{metrics["llm_unique_findings"]}</div>
             <div class="stat-label">LLM Only</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number stat-total">{metrics['semgrep_unique_findings']}</div>
+            <div class="stat-number stat-total">{metrics["semgrep_unique_findings"]}</div>
             <div class="stat-label">Semgrep Only</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number" style="color: #c084fc;">{metrics['agreement_rate']}%</div>
+            <div class="stat-number" style="color: #c084fc;">{metrics["agreement_rate"]}%</div>
             <div class="stat-label">Agreement Rate</div>
         </div>
     </div>
@@ -351,21 +369,21 @@ def generate_report(
     <div class="comparison-section">
         <h2>Coverage Comparison</h2>
         <div class="bar-container">
-            <div class="bar-label"><span>LLM SAST</span><span>{metrics['llm_coverage']}% ({metrics['llm_total_findings']} findings)</span></div>
+            <div class="bar-label"><span>LLM SAST</span><span>{metrics["llm_coverage"]}% ({metrics["llm_total_findings"]} findings)</span></div>
             <div style="background: #1a1a2e; border-radius: 4px; height: 24px; overflow: hidden;">
-                <div class="bar bar-llm" style="width: {metrics['llm_coverage']}%;">{metrics['llm_coverage']}%</div>
+                <div class="bar bar-llm" style="width: {metrics["llm_coverage"]}%;">{metrics["llm_coverage"]}%</div>
             </div>
         </div>
         <div class="bar-container">
-            <div class="bar-label"><span>Semgrep</span><span>{metrics['semgrep_coverage']}% ({metrics['semgrep_total_findings']} findings)</span></div>
+            <div class="bar-label"><span>Semgrep</span><span>{metrics["semgrep_coverage"]}% ({metrics["semgrep_total_findings"]} findings)</span></div>
             <div style="background: #1a1a2e; border-radius: 4px; height: 24px; overflow: hidden;">
-                <div class="bar bar-semgrep" style="width: {metrics['semgrep_coverage']}%;">{metrics['semgrep_coverage']}%</div>
+                <div class="bar bar-semgrep" style="width: {metrics["semgrep_coverage"]}%;">{metrics["semgrep_coverage"]}%</div>
             </div>
         </div>
         <div class="bar-container">
-            <div class="bar-label"><span>Overlapping</span><span>{metrics['agreement_rate']}% ({metrics['overlapping_findings']} findings)</span></div>
+            <div class="bar-label"><span>Overlapping</span><span>{metrics["agreement_rate"]}% ({metrics["overlapping_findings"]} findings)</span></div>
             <div style="background: #1a1a2e; border-radius: 4px; height: 24px; overflow: hidden;">
-                <div class="bar bar-overlap" style="width: {metrics['agreement_rate']}%;">{metrics['agreement_rate']}%</div>
+                <div class="bar bar-overlap" style="width: {metrics["agreement_rate"]}%;">{metrics["agreement_rate"]}%</div>
             </div>
         </div>
     </div>
@@ -393,28 +411,28 @@ def generate_report(
     
     <!-- Overlapping Findings -->
     <div class="comparison-section">
-        <h2>Overlapping Findings ({metrics['overlapping_findings']} temuan yang sama)</h2>
-        {_generate_overlap_cards(analysis['overlaps'])}
+        <h2>Overlapping Findings ({metrics["overlapping_findings"]} temuan yang sama)</h2>
+        {_generate_overlap_cards(analysis["overlaps"])}
     </div>
     
     <!-- LLM Only -->
     <div class="comparison-section">
-        <h2>LLM-Only Findings ({metrics['llm_unique_findings']} temuan unik LLM)</h2>
+        <h2>LLM-Only Findings ({metrics["llm_unique_findings"]} temuan unik LLM)</h2>
         <p style="color: #6b7280; margin-bottom: 12px; font-size: 0.9rem;">
             Vulnerability yang ditemukan LLM tapi TIDAK ditemukan Semgrep. 
             Bisa berupa false positives atau temuan kontekstual yang memerlukan pemahaman semantik.
         </p>
-        {_generate_findings_table(analysis['llm_only'], 'LLM')}
+        {_generate_findings_table(analysis["llm_only"], "LLM")}
     </div>
     
     <!-- Semgrep Only -->
     <div class="comparison-section">
-        <h2>Semgrep-Only Findings ({metrics['semgrep_unique_findings']} temuan unik Semgrep)</h2>
+        <h2>Semgrep-Only Findings ({metrics["semgrep_unique_findings"]} temuan unik Semgrep)</h2>
         <p style="color: #6b7280; margin-bottom: 12px; font-size: 0.9rem;">
             Vulnerability yang ditemukan Semgrep tapi TIDAK ditemukan LLM.
             Biasanya merupakan pattern matching yang tepat sasaran.
         </p>
-        {_generate_findings_table(analysis['semgrep_only'], 'Semgrep')}
+        {_generate_findings_table(analysis["semgrep_only"], "Semgrep")}
     </div>
 
     <!-- Analysis Summary -->
@@ -429,21 +447,23 @@ def generate_report(
 </footer>
 </body>
 </html>"""
-    
-    with open(output_file, 'w', encoding='utf-8') as f:
+
+    with open(output_file, "w", encoding="utf-8") as f:
         f.write(html_content)
-    
+
     print(f"\nHTML Report disimpan ke: {output_file}")
 
 
 def _generate_all_findings_rows(llm_findings, semgrep_findings):
     rows = []
-    all_findings = [(f, 'LLM') for f in llm_findings] + [(f, 'Semgrep') for f in semgrep_findings]
+    all_findings = [(f, "LLM") for f in llm_findings] + [
+        (f, "Semgrep") for f in semgrep_findings
+    ]
     all_findings.sort(key=lambda x: (x[0].file, x[0].line_start))
-    
+
     for finding, tool in all_findings[:100]:  # Batasi 100 baris
-        tool_class = 'tool-llm' if tool == 'LLM' else 'tool-semgrep'
-        badge_class = f'badge-{finding.severity}'
+        tool_class = "tool-llm" if tool == "LLM" else "tool-semgrep"
+        badge_class = f"badge-{finding.severity}"
         rows.append(f"""<tr>
             <td><span class="badge {tool_class}">{tool}</span></td>
             <td>{finding.file}</td>
@@ -453,14 +473,18 @@ def _generate_all_findings_rows(llm_findings, semgrep_findings):
             <td>{finding.cwe_id}</td>
             <td>{finding.title[:50]}</td>
         </tr>""")
-    
-    return '\n'.join(rows) if rows else '<tr><td colspan="7" style="text-align:center;color:#6b7280;">Tidak ada findings</td></tr>'
+
+    return (
+        "\n".join(rows)
+        if rows
+        else '<tr><td colspan="7" style="text-align:center;color:#6b7280;">Tidak ada findings</td></tr>'
+    )
 
 
 def _generate_overlap_cards(overlaps):
     if not overlaps:
         return '<p style="color: #6b7280;">Tidak ada overlapping findings.</p>'
-    
+
     cards = []
     for llm, sg in overlaps[:20]:  # Batasi 20
         cards.append(f"""
@@ -482,14 +506,14 @@ def _generate_overlap_cards(overlaps):
                 </div>
             </div>
         </div>""")
-    
-    return '\n'.join(cards)
+
+    return "\n".join(cards)
 
 
 def _generate_findings_table(findings, tool):
     if not findings:
         return f'<p style="color: #6b7280;">Tidak ada findings unik untuk {tool}.</p>'
-    
+
     rows = []
     for f in findings:
         rows.append(f"""<tr>
@@ -501,40 +525,56 @@ def _generate_findings_table(findings, tool):
             <td>{f.title[:60]}</td>
             <td style="font-size:0.8rem;color:#9ca3af">{f.description[:100]}...</td>
         </tr>""")
-    
+
     return f"""<table class="findings-table">
         <thead>
             <tr><th>File</th><th>Line</th><th>Severity</th><th>Category</th><th>CWE</th><th>Title</th><th>Description</th></tr>
         </thead>
-        <tbody>{''.join(rows)}</tbody>
+        <tbody>{"".join(rows)}</tbody>
     </table>"""
 
 
 def _generate_analysis_text(metrics):
-    llm_cov = metrics['llm_coverage']
-    sg_cov = metrics['semgrep_coverage']
-    agree = metrics['agreement_rate']
-    
+    llm_cov = metrics["llm_coverage"]
+    sg_cov = metrics["semgrep_coverage"]
+    agree = metrics["agreement_rate"]
+
     insights = []
-    
+
     if llm_cov > sg_cov:
-        insights.append(f"<li>LLM memiliki <strong>coverage lebih luas</strong> ({llm_cov}% vs {sg_cov}%), karena kemampuannya memahami konteks semantik kode.</li>")
+        insights.append(
+            f"<li>LLM memiliki <strong>coverage lebih luas</strong> ({llm_cov}% vs {sg_cov}%), karena kemampuannya memahami konteks semantik kode.</li>"
+        )
     else:
-        insights.append(f"<li>Semgrep memiliki <strong>coverage lebih luas</strong> ({sg_cov}% vs {llm_cov}%), karena ruleset yang komprehensif.</li>")
-    
+        insights.append(
+            f"<li>Semgrep memiliki <strong>coverage lebih luas</strong> ({sg_cov}% vs {llm_cov}%), karena ruleset yang komprehensif.</li>"
+        )
+
     if agree > 60:
-        insights.append(f"<li><strong>Tingkat kesepakatan tinggi</strong> ({agree}%), kedua tool konsisten dalam menemukan vulnerability utama.</li>")
+        insights.append(
+            f"<li><strong>Tingkat kesepakatan tinggi</strong> ({agree}%), kedua tool konsisten dalam menemukan vulnerability utama.</li>"
+        )
     elif agree > 30:
-        insights.append(f"<li><strong>Tingkat kesepakatan moderat</strong> ({agree}%), ada perbedaan pendekatan yang saling melengkapi.</li>")
+        insights.append(
+            f"<li><strong>Tingkat kesepakatan moderat</strong> ({agree}%), ada perbedaan pendekatan yang saling melengkapi.</li>"
+        )
     else:
-        insights.append(f"<li><strong>Tingkat kesepakatan rendah</strong> ({agree}%), kedua tool menemukan jenis vulnerability yang berbeda.</li>")
-    
-    insights.append("<li><strong>LLM</strong> unggul dalam: memahami konteks bisnis, menjelaskan dampak, memberikan remediation yang kontekstual, dan menemukan logic flaws.</li>")
-    insights.append("<li><strong>Semgrep</strong> unggul dalam: kecepatan scan, konsistensi, tidak ada false positives dari hallucination, reproducibility, dan integrasi CI/CD.</li>")
-    insights.append("<li><strong>Rekomendasi</strong>: Gunakan Semgrep untuk CI/CD pipeline (cepat, deterministik), dan LLM untuk deep review saat code review atau audit keamanan.</li>")
-    
+        insights.append(
+            f"<li><strong>Tingkat kesepakatan rendah</strong> ({agree}%), kedua tool menemukan jenis vulnerability yang berbeda.</li>"
+        )
+
+    insights.append(
+        "<li><strong>LLM</strong> unggul dalam: memahami konteks bisnis, menjelaskan dampak, memberikan remediation yang kontekstual, dan menemukan logic flaws.</li>"
+    )
+    insights.append(
+        "<li><strong>Semgrep</strong> unggul dalam: kecepatan scan, konsistensi, tidak ada false positives dari hallucination, reproducibility, dan integrasi CI/CD.</li>"
+    )
+    insights.append(
+        "<li><strong>Rekomendasi</strong>: Gunakan Semgrep untuk CI/CD pipeline (cepat, deterministik), dan LLM untuk deep review saat code review atau audit keamanan.</li>"
+    )
+
     return f"""<ul style="list-style: disc; padding-left: 24px; color: #d1d5db; line-height: 2;">
-        {''.join(insights)}
+        {"".join(insights)}
     </ul>"""
 
 
@@ -543,21 +583,27 @@ def print_comparison_summary(metrics: dict, analysis: dict):
     print("\n" + "=" * 70)
     print("HASIL PERBANDINGAN: LLM SAST vs SEMGREP")
     print("=" * 70)
-    
+
     print(f"\n{'Tool':<20} {'Findings':>10} {'Coverage':>10}")
     print("-" * 45)
-    print(f"{'LLM SAST':<20} {metrics['llm_total_findings']:>10} {metrics['llm_coverage']:>9}%")
-    print(f"{'Semgrep':<20} {metrics['semgrep_total_findings']:>10} {metrics['semgrep_coverage']:>9}%")
+    print(
+        f"{'LLM SAST':<20} {metrics['llm_total_findings']:>10} {metrics['llm_coverage']:>9}%"
+    )
+    print(
+        f"{'Semgrep':<20} {metrics['semgrep_total_findings']:>10} {metrics['semgrep_coverage']:>9}%"
+    )
     print("-" * 45)
-    print(f"{'Overlapping':<20} {metrics['overlapping_findings']:>10} {metrics['agreement_rate']:>9}%")
+    print(
+        f"{'Overlapping':<20} {metrics['overlapping_findings']:>10} {metrics['agreement_rate']:>9}%"
+    )
     print(f"{'LLM Only':<20} {metrics['llm_unique_findings']:>10}")
     print(f"{'Semgrep Only':<20} {metrics['semgrep_unique_findings']:>10}")
     print(f"{'Total Unique':<20} {metrics['total_unique_findings']:>10}")
-    
+
     print("\n" + "-" * 70)
     print("KELEBIHAN & KEKURANGAN")
     print("-" * 70)
-    
+
     comparison_table = [
         ("Aspek", "LLM SAST", "Semgrep"),
         ("─" * 20, "─" * 20, "─" * 20),
@@ -573,16 +619,16 @@ def print_comparison_summary(metrics: dict, analysis: dict):
         ("Reprodusibilitas", "Tidak konsisten", "Deterministik"),
         ("Logic Flaws", "Bisa deteksi", "Terbatas"),
     ]
-    
+
     for row in comparison_table:
         print(f"  {row[0]:<22} {row[1]:<22} {row[2]}")
-    
+
     print("\n" + "=" * 70)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Bandingkan hasil LLM SAST vs Semgrep',
+        description="Bandingkan hasil LLM SAST vs Semgrep",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Contoh penggunaan:
@@ -590,64 +636,78 @@ Contoh penggunaan:
     --llm results/llm_results.json \\
     --semgrep results/semgrep_full_results.json \\
     --output results/comparison_report.html
-        """
+        """,
     )
-    parser.add_argument('--llm', required=True, help='Path ke hasil LLM SAST (JSON)')
-    parser.add_argument('--semgrep', required=True, help='Path ke hasil Semgrep (JSON)')
+    parser.add_argument("--llm", required=True, help="Path ke hasil LLM SAST (JSON)")
+    parser.add_argument("--semgrep", required=True, help="Path ke hasil Semgrep (JSON)")
     parser.add_argument(
-        '--output',
-        default='results/comparison_report.html',
-        help='File output HTML report (default: results/comparison_report.html)'
+        "--output",
+        default="results/comparison_report.html",
+        help="File output HTML report (default: results/comparison_report.html)",
     )
-    
+
     args = parser.parse_args()
-    
+
     print("=" * 70)
     print("SAST COMPARISON TOOL: LLM vs Semgrep")
     print("=" * 70)
-    
+
     # Load hasil
     print(f"\nLoading LLM results dari: {args.llm}")
     llm_findings = load_llm_results(args.llm)
     print(f"  → {len(llm_findings)} findings dimuat")
-    
+
     print(f"\nLoading Semgrep results dari: {args.semgrep}")
     semgrep_findings = load_semgrep_results(args.semgrep)
     print(f"  → {len(semgrep_findings)} findings dimuat")
-    
+
     # Analisis overlap
     print("\nMenganalisis overlap...")
     analysis = find_overlaps(llm_findings, semgrep_findings)
-    
+
     # Hitung metrik
     metrics = calculate_metrics(analysis, len(llm_findings), len(semgrep_findings))
-    
+
     # Print summary
     print_comparison_summary(metrics, analysis)
-    
+
     # Generate HTML report
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     generate_report(llm_findings, semgrep_findings, analysis, metrics, args.output)
-    
+
     # Save JSON summary
-    json_output = args.output.replace('.html', '_metrics.json')
-    with open(json_output, 'w') as f:
-        json.dump({
-            'metrics': metrics,
-            'llm_only_findings': [
-                {'file': f.file, 'line': f.line_start, 'severity': f.severity, 
-                 'category': f.category, 'title': f.title}
-                for f in analysis['llm_only']
-            ],
-            'semgrep_only_findings': [
-                {'file': f.file, 'line': f.line_start, 'severity': f.severity,
-                 'category': f.category, 'title': f.title}
-                for f in analysis['semgrep_only']
-            ],
-        }, f, indent=2)
-    
+    json_output = args.output.replace(".html", "_metrics.json")
+    with open(json_output, "w") as f:
+        json.dump(
+            {
+                "metrics": metrics,
+                "llm_only_findings": [
+                    {
+                        "file": f.file,
+                        "line": f.line_start,
+                        "severity": f.severity,
+                        "category": f.category,
+                        "title": f.title,
+                    }
+                    for f in analysis["llm_only"]
+                ],
+                "semgrep_only_findings": [
+                    {
+                        "file": f.file,
+                        "line": f.line_start,
+                        "severity": f.severity,
+                        "category": f.category,
+                        "title": f.title,
+                    }
+                    for f in analysis["semgrep_only"]
+                ],
+            },
+            f,
+            indent=2,
+        )
+
     print(f"Metrics JSON disimpan ke: {json_output}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

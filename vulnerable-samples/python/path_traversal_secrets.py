@@ -15,6 +15,7 @@ import yaml
 # PATH TRAVERSAL
 # ============================================================
 
+
 # ===== VULNERABLE: Path Traversal =====
 def read_file_vulnerable(filename):
     """Membaca file dari direktori uploads - RENTAN terhadap Path Traversal"""
@@ -86,6 +87,7 @@ def hash_sha1_vulnerable(data):
 # INSECURE DESERIALIZATION
 # ============================================================
 
+
 # ===== VULNERABLE: Pickle Deserialization =====
 def load_user_session_vulnerable(session_data):
     """Load user session - RENTAN terhadap deserialization attack"""
@@ -111,6 +113,7 @@ def parse_config_secure(yaml_content):
 def hash_password_secure(password):
     """Hash password - AMAN menggunakan bcrypt"""
     import bcrypt
+
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(password.encode(), salt)
 
