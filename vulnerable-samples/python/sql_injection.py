@@ -4,7 +4,6 @@ Kategori: OWASP A03:2021 - Injection
 """
 
 import sqlite3
-import mysql.connector
 
 
 # ===== VULNERABLE: SQL Injection via string formatting =====

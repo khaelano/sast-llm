@@ -9,8 +9,6 @@ import os
 import argparse
 from pathlib import Path
 from dataclasses import dataclass
-from collections import defaultdict
-from typing import Optional
 
 
 @dataclass
@@ -461,7 +459,12 @@ def _generate_all_findings_rows(llm_findings, semgrep_findings):
     ]
     all_findings.sort(key=lambda x: (x[0].file, x[0].line_start))
 
-    for finding, tool in all_findings[:100]:  # Batasi 100 baris
+    total = len(all_findings)
+    if total > 100:
+        print(
+            f"  ⚠ {total} total findings — hanya 100 pertama yang ditampilkan di tabel"
+        )
+    for finding, tool in all_findings[:100]:
         tool_class = "tool-llm" if tool == "LLM" else "tool-semgrep"
         badge_class = f"badge-{finding.severity}"
         rows.append(f"""<tr>
@@ -486,7 +489,10 @@ def _generate_overlap_cards(overlaps):
         return '<p style="color: #6b7280;">Tidak ada overlapping findings.</p>'
 
     cards = []
-    for llm, sg in overlaps[:20]:  # Batasi 20
+    total = len(overlaps)
+    if total > 20:
+        print(f"  ⚠ {total} overlapping pairs — hanya 20 pertama yang ditampilkan")
+    for llm, sg in overlaps[:20]:
         cards.append(f"""
         <div class="card">
             <div class="overlap-pair">
@@ -677,7 +683,7 @@ Contoh penggunaan:
 
     # Save JSON summary
     json_output = args.output.replace(".html", "_metrics.json")
-    with open(json_output, "w") as f:
+    with open(json_output, "w", encoding="utf-8") as f:
         json.dump(
             {
                 "metrics": metrics,

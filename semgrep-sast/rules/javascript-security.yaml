@@ -90,12 +90,10 @@ rules:
 
   - id: js-dangerous-eval
     patterns:
-      - pattern: eval($INPUT)
-      - pattern: new Function($INPUT)
-      - pattern: setTimeout($INPUT, ...)
-        metavariable-type:
-          metavariable: $INPUT
-          types: [string]
+      - pattern-either:
+          - pattern: eval($INPUT)
+          - pattern: new Function($INPUT)
+          - pattern: setTimeout($INPUT, ...)
     message: |
       Code Injection: eval() atau new Function() dengan input yang tidak dipercaya.
       Hindari eval() — refactor logika untuk tidak memerlukan dynamic code execution.
@@ -124,11 +122,11 @@ rules:
       cwe: "CWE-798"
 
   - id: js-hardcoded-api-key
-    pattern: |
-      const $KEY = "..."
-      metavariable-regex:
-        metavariable: $KEY
-        regex: (?i)(api_key|apikey|secret|password|token|credential)
+    patterns:
+      - pattern: const $KEY = "..."
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i)(api_key|apikey|secret|password|token|credential)
     message: |
       Hardcoded Secret: Secret/credential di-hardcode dalam kode.
       Gunakan environment variable atau secret manager.

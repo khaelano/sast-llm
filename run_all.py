@@ -5,7 +5,7 @@ Master Runner: Jalankan semua scan dan buat laporan perbandingan lengkap
 
 import os
 import sys
-import json
+import shutil
 import subprocess
 import argparse
 from pathlib import Path
@@ -99,7 +99,10 @@ Contoh:
     )
 
     parser.add_argument(
-        "--model", default="deepseek-v4-pro", help="Model DeepSeek (default: deepseek-v4-pro)"
+        "--model",
+        default="deepseek-v4-pro",
+        choices=["deepseek-v4-flash", "deepseek-v4-pro"],
+        help="Model DeepSeek (default: deepseek-v4-pro)",
     )
     parser.add_argument(
         "--target", default="vulnerable-samples/", help="Direktori target"
@@ -184,10 +187,8 @@ Contoh:
         print("─" * 60)
 
         # Cek apakah semgrep tersedia
-        semgrep_check = subprocess.run(
-            ["which", "semgrep"], capture_output=True, text=True
-        )
-        if semgrep_check.returncode != 0:
+        semgrep_path = shutil.which("semgrep")
+        if semgrep_path is None:
             print("✗ Semgrep tidak tersedia. Lewati step ini.")
             print("  Install: pip install semgrep")
         else:

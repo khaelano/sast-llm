@@ -7,14 +7,49 @@ Menganalisis kode untuk menemukan vulnerability menggunakan LLM (DeepSeek)
 import argparse
 import json
 import os
+import sys
 import time
+from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import OpenAI, APIError, RateLimitError, APIConnectionError
 
 load_dotenv()
+
+# Allow importing prompts from the same directory despite the hyphen in "llm-sast"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from prompts import (  # noqa: E402
+    SYSTEM_PROMPT_GENERAL,
+    SYSTEM_PROMPT_DETAILED,
+    SYSTEM_PROMPT_QUICK,
+    SYSTEM_PROMPT_INJECTION,
+    SYSTEM_PROMPT_AUTH,
+    SYSTEM_PROMPT_CRYPTO,
+)
+
+PROMPTS = {
+    "general": SYSTEM_PROMPT_GENERAL,
+    "detailed": SYSTEM_PROMPT_DETAILED,
+    "quick": SYSTEM_PROMPT_QUICK,
+    "injection": SYSTEM_PROMPT_INJECTION,
+    "auth": SYSTEM_PROMPT_AUTH,
+    "crypto": SYSTEM_PROMPT_CRYPTO,
+}
+
+_OUTPUT_FORMAT_INSTRUCTION = (
+    "\n\nPENTING: Kembalikan response dalam format JSON object "
+    'dengan key "vulnerabilities" yang berisi array temuan. '
+    'Contoh: {"vulnerabilities": [...]}. '
+    "Jika tidak ada vulnerability, kembalikan: "
+    '{"vulnerabilities": []}'
+)
+
+# Retry configuration
+MAX_RETRIES = 3
+RETRY_DELAY = 2.0  # seconds, multiplied exponentially
+RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
 
 
 @dataclass
@@ -41,43 +76,10 @@ class AnalysisResult:
     file: str
     language: str
     total_lines: int
-    vulnerabilities: list
+    vulnerabilities: list[Vulnerability]
     scan_duration_seconds: float
     model_used: str
     tokens_used: int
-
-
-SYSTEM_PROMPT = """Kamu adalah security expert yang menganalisis kode untuk menemukan kerentanan keamanan (vulnerabilities).
-
-Tugasmu adalah menganalisis kode yang diberikan dan mengidentifikasi semua kerentanan keamanan yang ada.
-
-Untuk setiap kerentanan yang ditemukan, berikan informasi berikut dalam format JSON:
-- line_start: baris awal kode yang rentan (integer)
-- line_end: baris akhir kode yang rentan (integer)
-- severity: tingkat keparahan (CRITICAL/HIGH/MEDIUM/LOW/INFO)
-- category: kategori OWASP (contoh: "SQL Injection", "XSS", "Command Injection", dll)
-- cwe_id: CWE identifier (contoh: "CWE-89", "CWE-79", "CWE-78")
-- title: judul singkat vulnerability
-- description: penjelasan mengapa kode ini rentan (dalam Bahasa Indonesia)
-- vulnerable_code: potongan kode yang rentan
-- remediation: cara memperbaiki vulnerability (dalam Bahasa Indonesia)
-- confidence: tingkat keyakinan temuan (HIGH/MEDIUM/LOW)
-
-Fokus pada kerentanan nyata berdasarkan OWASP Top 10:
-1. Broken Access Control
-2. Cryptographic Failures
-3. Injection (SQL, Command, LDAP, dll)
-4. Insecure Design
-5. Security Misconfiguration
-6. Vulnerable Components
-7. Authentication Failures
-8. Software Integrity Failures
-9. Logging Failures
-10. SSRF
-
-Kembalikan HANYA JSON array dari vulnerability yang ditemukan.
-Jika tidak ada vulnerability, kembalikan array kosong: []
-"""
 
 
 def detect_language(filepath: str) -> str:
@@ -110,8 +112,54 @@ def read_file_with_line_numbers(filepath: str) -> tuple[str, int]:
     return "\n".join(numbered_lines), len(lines)
 
 
+def _call_with_retry(client: OpenAI, model: str, system_prompt: str, user_prompt: str):
+    """Call the LLM API with exponential backoff retry on transient errors."""
+    last_error: Exception | None = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            return client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,  # Rendah untuk konsistensi
+            )
+        except RateLimitError as e:
+            last_error = e
+            delay = RETRY_DELAY * (2 ** (attempt - 1))
+            print(
+                f"    Rate limited, retrying in {delay:.0f}s (attempt {attempt}/{MAX_RETRIES})..."
+            )
+            time.sleep(delay)
+        except APIConnectionError as e:
+            last_error = e
+            delay = RETRY_DELAY * (2 ** (attempt - 1))
+            print(
+                f"    Connection error, retrying in {delay:.0f}s (attempt {attempt}/{MAX_RETRIES})..."
+            )
+            time.sleep(delay)
+        except APIError as e:
+            status = getattr(e, "status_code", None)
+            if status in RETRYABLE_STATUSES:
+                last_error = e
+                delay = RETRY_DELAY * (2 ** (attempt - 1))
+                print(
+                    f"    API error {status}, retrying in {delay:.0f}s (attempt {attempt}/{MAX_RETRIES})..."
+                )
+                time.sleep(delay)
+            else:
+                raise
+    if last_error is not None:
+        raise last_error
+
+
 def analyze_file(
-    client: OpenAI, filepath: str, model: str = "deepseek-v4-pro"
+    client: OpenAI,
+    filepath: str,
+    model: str = "deepseek-v4-pro",
+    prompt_name: str = "general",
 ) -> AnalysisResult:
     """Analisis satu file menggunakan LLM"""
     print(f"  Menganalisis: {filepath}")
@@ -129,20 +177,14 @@ Total baris: {total_lines}
 {code_with_lines}
 ```
 
-Berikan hasil analisis dalam format JSON array. Setiap elemen adalah satu vulnerability."""
+Berikan hasil analisis dalam format JSON object dengan key "vulnerabilities"."""
+
+    system_prompt = PROMPTS[prompt_name] + _OUTPUT_FORMAT_INSTRUCTION
 
     start_time = time.time()
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.1,  # Rendah untuk konsistensi
-        )
+        response = _call_with_retry(client, model, system_prompt, user_prompt)
 
         duration = time.time() - start_time
         if response.usage is not None:
@@ -158,7 +200,6 @@ Berikan hasil analisis dalam format JSON array. Setiap elemen adalah satu vulner
         if isinstance(parsed, list):
             vulns_raw = parsed
         elif isinstance(parsed, dict):
-            # LLM mungkin membungkus dalam key
             vulns_raw = (
                 parsed.get("vulnerabilities")
                 or parsed.get("findings")
@@ -168,7 +209,7 @@ Berikan hasil analisis dalam format JSON array. Setiap elemen adalah satu vulner
         else:
             vulns_raw = []
 
-        vulnerabilities = []
+        vulnerabilities: list[Vulnerability] = []
         for v in vulns_raw:
             try:
                 vuln = Vulnerability(
@@ -219,6 +260,7 @@ def scan_directory(
     directory: str,
     extensions: list[str] | None = None,
     model: str = "deepseek-v4-pro",
+    prompt_name: str = "general",
 ) -> list[AnalysisResult]:
     """Scan semua file dalam direktori"""
     if extensions is None:
@@ -234,7 +276,7 @@ def scan_directory(
 
     for i, filepath in enumerate(files, 1):
         print(f"\n[{i}/{len(files)}] ", end="")
-        result = analyze_file(client, str(filepath), model)
+        result = analyze_file(client, str(filepath), model, prompt_name)
         results.append(result)
 
         # Tampilkan ringkasan
@@ -255,10 +297,10 @@ def print_summary(results: list[AnalysisResult]):
     total_tokens = sum(r.tokens_used for r in results)
     total_time = sum(r.scan_duration_seconds for r in results)
 
-    severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
+    severity_counts: dict[str, int] = defaultdict(int)
     for result in results:
         for vuln in result.vulnerabilities:
-            severity_counts[vuln.severity] = severity_counts.get(vuln.severity, 0) + 1
+            severity_counts[vuln.severity] += 1
 
     print("\n" + "=" * 60)
     print("RINGKASAN HASIL SCAN (LLM SAST)")
@@ -269,9 +311,15 @@ def print_summary(results: list[AnalysisResult]):
     print(f"Total token digunakan : {total_tokens:,}")
     print()
     print("Distribusi Severity:")
-    for sev, count in severity_counts.items():
+    for sev in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"):
+        count = severity_counts.get(sev, 0)
         bar = "█" * count
         print(f"  {sev:<10} : {count:3d} {bar}")
+    # Print any unknown severities
+    for sev, count in severity_counts.items():
+        if sev not in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"):
+            bar = "█" * count
+            print(f"  {sev:<10} : {count:3d} {bar} (unknown)")
 
     print()
     print("Detail per File:")
@@ -319,6 +367,9 @@ Contoh penggunaan:
 
   # Gunakan model tertentu dan simpan output
   python analyzer.py --dir vulnerable-samples/ --model deepseek-v4-pro --output results/llm_results.json
+
+  # Gunakan prompt khusus (injection, auth, crypto, detailed, quick)
+  python analyzer.py --dir vulnerable-samples/ --prompt injection
         """,
     )
 
@@ -333,6 +384,12 @@ Contoh penggunaan:
         help="Model DeepSeek yang digunakan (default: deepseek-v4-pro)",
     )
     parser.add_argument(
+        "--prompt",
+        default="general",
+        choices=list(PROMPTS.keys()),
+        help="Prompt template untuk analisis (default: general)",
+    )
+    parser.add_argument(
         "--output",
         default="results/llm_results.json",
         help="File output JSON (default: results/llm_results.json)",
@@ -343,6 +400,11 @@ Contoh penggunaan:
         default=[".py", ".js", ".ts"],
         help="Ekstensi file yang akan di-scan (default: .py .js .ts)",
     )
+    parser.add_argument(
+        "--no-retry",
+        action="store_true",
+        help="Disable automatic retry on API errors",
+    )
 
     args = parser.parse_args()
 
@@ -351,13 +413,14 @@ Contoh penggunaan:
     if not api_key:
         print("Error: DEEPSEEK_API_KEY environment variable tidak ditemukan!")
         print("Set dengan: export DEEPSEEK_API_KEY='your-api-key'")
-        exit(1)
+        sys.exit(1)
 
     client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
     print("=" * 60)
     print("LLM-based SAST Analyzer")
     print(f"Model: {args.model}")
+    print(f"Prompt: {args.prompt}")
     print("=" * 60)
 
     # Buat direktori output jika belum ada
@@ -367,11 +430,15 @@ Contoh penggunaan:
 
     if args.file:
         print(f"\nMenganalisis file: {args.file}")
-        result = analyze_file(client, args.file, args.model)
+        result = analyze_file(client, args.file, args.model, args.prompt)
         results = [result]
     else:
         results = scan_directory(
-            client, args.dir, extensions=args.extensions, model=args.model
+            client,
+            args.dir,
+            extensions=args.extensions,
+            model=args.model,
+            prompt_name=args.prompt,
         )
 
     print_summary(results)

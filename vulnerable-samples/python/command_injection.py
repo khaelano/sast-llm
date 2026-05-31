@@ -59,7 +59,6 @@ def ping_host_secure(hostname):
 # ===== SECURE: Subprocess dengan shlex =====
 def get_file_info_secure(filename):
     """Mendapatkan info file - AMAN"""
-    import shlex
 
     # SECURE: Argument list tanpa shell=True
     result = subprocess.run(["file", filename], capture_output=True, text=True)
